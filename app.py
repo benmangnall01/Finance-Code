@@ -100,7 +100,7 @@ with col3:
         "Top N",
         min_value=1,
         max_value=max_N,
-        value=10,
+        value=3,
         step=1
     )
 
