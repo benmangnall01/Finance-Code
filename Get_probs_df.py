@@ -73,8 +73,8 @@ with col3:
     top_n = st.number_input(
         "Top N",
         min_value=1,
-        max_value=500,
-        value=10,
+        max_value=max_N,
+        value=3,
         step=1
     )
 
