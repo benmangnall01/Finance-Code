@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 from pathlib import Path
-from datetime import timedelta
+import plotly.express as px
 
 # ---------------------------------------------------------
 # Page setup
@@ -15,6 +15,7 @@ st.set_page_config(
 
 st.title("ML Portfolio Tracker")
 
+
 # ---------------------------------------------------------
 # Find the master CSV
 # ---------------------------------------------------------
@@ -23,19 +24,25 @@ WEBSITE_DIR = Path(__file__).resolve().parent
 
 MASTER_FILE = WEBSITE_DIR / "Probabilities_All.csv"
 
+
 # ---------------------------------------------------------
 # Load data
 # ---------------------------------------------------------
 
 if not MASTER_FILE.exists():
-    st.error(f"Could not find the master file:\n{MASTER_FILE}")
+
+    st.error(
+        f"Could not find the master file:\n{MASTER_FILE}"
+    )
+
     st.stop()
+
 
 df = pd.read_csv(MASTER_FILE)
 
 df["Date"] = pd.to_datetime(df["Date"])
 
-max_N = df["Ticker"].nunique()
+max_N = df['Ticker'].nunique()
 
 # ---------------------------------------------------------
 # Define available models
@@ -46,8 +53,22 @@ models = {
     "Random Forest": "RF",
     "XGBoost": "XGBoost",
     "LGBM": "LGBM",
-    "CatBoost": "CatBoost",
+    "CatBoost": "CatBoost"
 }
+
+
+# ---------------------------------------------------------
+# Daily return columns
+# ---------------------------------------------------------
+
+daily_returns = {
+    "thu_to_fri_return": "Thu → Fri",
+    "fri_to_mon_return": "Fri → Mon",
+    "mon_to_tue_return": "Mon → Tue",
+    "tue_to_wed_return": "Tue → Wed",
+    "wed_to_thu_return": "Wed → Thu"
+}
+
 
 # ---------------------------------------------------------
 # Controls
@@ -58,27 +79,33 @@ st.subheader("Portfolio Settings")
 col1, col2, col3 = st.columns(3)
 
 with col1:
+
     selected_model = st.selectbox(
         "Model",
         list(models.keys())
     )
 
+
 with col2:
+
     selected_direction = st.selectbox(
         "Direction",
-        ["Long/Short", "Long", "Short"]
+        [ "Long/Short", "Long", "Short"]
     )
 
+
 with col3:
+
     top_n = st.number_input(
         "Top N",
         min_value=1,
         max_value=max_N,
-        value=3,
+        value=10,
         step=1
     )
 
 top_n = int(top_n)
+
 
 # ---------------------------------------------------------
 # Determine probability columns
@@ -95,13 +122,19 @@ short_probability_column = (
 )
 
 
+required_columns = []
+
 if selected_direction == "Long":
 
-    required_columns = [long_probability_column]
+    required_columns = [
+        long_probability_column
+    ]
 
 elif selected_direction == "Short":
 
-    required_columns = [short_probability_column]
+    required_columns = [
+        short_probability_column
+    ]
 
 else:
 
@@ -114,37 +147,49 @@ else:
 for column in required_columns:
 
     if column not in df.columns:
+
         st.error(
             f"Could not find probability column: {column}"
         )
+
         st.stop()
 
 
 # ---------------------------------------------------------
-# Calculate historical weekly portfolio returns
+# Check daily return columns
 # ---------------------------------------------------------
 
-weekly_results = []
+for column in daily_returns:
+
+    if column not in df.columns:
+
+        st.error(
+            f"Could not find daily return column: {column}"
+        )
+
+        st.stop()
+
+
+# ---------------------------------------------------------
+# Calculate daily portfolio returns
+# ---------------------------------------------------------
+
+daily_results = []
 
 
 for prediction_date, week_df in df.groupby("Date"):
 
-    # Only completed weeks
-    week_df = week_df.dropna(
-        subset=["weekly_return"]
-    ).copy()
-
-    if week_df.empty:
-        continue
+    week_df = week_df.copy()
 
 
     # -----------------------------------------------------
+    # Select stocks for this prediction week
+    # -----------------------------------------------------
+
     # Long-only
-    # -----------------------------------------------------
-
     if selected_direction == "Long":
 
-        long_df = (
+        selected_stocks = (
             week_df
             .dropna(subset=[long_probability_column])
             .sort_values(
@@ -152,16 +197,20 @@ for prediction_date, week_df in df.groupby("Date"):
                 ascending=False
             )
             .head(top_n)
+            .copy()
         )
 
-        if long_df.empty:
+        if selected_stocks.empty:
             continue
 
-        portfolio_return = (
-            long_df["weekly_return"].mean()
+
+        selected_stocks["Position Weight"] = (
+            1 / len(selected_stocks)
         )
 
-        number_of_stocks = len(long_df)
+        selected_stocks["Position Direction"] = (
+            "Long"
+        )
 
 
     # -----------------------------------------------------
@@ -170,7 +219,7 @@ for prediction_date, week_df in df.groupby("Date"):
 
     elif selected_direction == "Short":
 
-        short_df = (
+        selected_stocks = (
             week_df
             .dropna(subset=[short_probability_column])
             .sort_values(
@@ -178,16 +227,20 @@ for prediction_date, week_df in df.groupby("Date"):
                 ascending=True
             )
             .head(top_n)
+            .copy()
         )
 
-        if short_df.empty:
+        if selected_stocks.empty:
             continue
 
-        portfolio_return = (
-            -short_df["weekly_return"]
-        ).mean()
 
-        number_of_stocks = len(short_df)
+        selected_stocks["Position Weight"] = (
+            1 / len(selected_stocks)
+        )
+
+        selected_stocks["Position Direction"] = (
+            "Short"
+        )
 
 
     # -----------------------------------------------------
@@ -196,8 +249,7 @@ for prediction_date, week_df in df.groupby("Date"):
 
     else:
 
-        # Long the top N long probabilities
-        long_df = (
+        long_stocks = (
             week_df
             .dropna(subset=[long_probability_column])
             .sort_values(
@@ -205,10 +257,11 @@ for prediction_date, week_df in df.groupby("Date"):
                 ascending=False
             )
             .head(top_n)
+            .copy()
         )
 
-        # Short the bottom N short probabilities
-        short_df = (
+
+        short_stocks = (
             week_df
             .dropna(subset=[short_probability_column])
             .sort_values(
@@ -216,60 +269,160 @@ for prediction_date, week_df in df.groupby("Date"):
                 ascending=True
             )
             .head(top_n)
+            .copy()
         )
 
-        if long_df.empty or short_df.empty:
+
+        if long_stocks.empty or short_stocks.empty:
             continue
 
-        long_return = (
-            long_df["weekly_return"].mean()
+
+        long_stocks["Position Weight"] = (
+            1 / (len(long_stocks) + len(short_stocks))
         )
 
-        short_return = (
-            -short_df["weekly_return"]
-        ).mean()
+        short_stocks["Position Weight"] = (
+            1 / (len(long_stocks) + len(short_stocks))
+        )
 
-        # Long and short sides each represent 50%
-        portfolio_return = (
-            long_return + short_return
-        ) / 2
 
-        number_of_stocks = (
-            len(long_df) + len(short_df)
+        long_stocks["Position Direction"] = (
+            "Long"
+        )
+
+        short_stocks["Position Direction"] = (
+            "Short"
+        )
+
+
+        selected_stocks = pd.concat(
+            [
+                long_stocks,
+                short_stocks
+            ],
+            ignore_index=True
         )
 
 
     # -----------------------------------------------------
-    # The return happens ONE WEEK AFTER the prediction.
-    #
-    # Therefore:
-    #
-    # Prediction Date = date the stocks were selected
-    # Return Date     = date the weekly return is realised
+    # Calculate each day's portfolio return
     # -----------------------------------------------------
 
-    return_date = prediction_date + timedelta(days=7)
+    for return_column, return_label in daily_returns.items():
+
+        available_returns = selected_stocks[
+            return_column
+        ].dropna()
 
 
-    weekly_results.append({
-        "Prediction Date": prediction_date,
-        "Return Date": return_date,
-        "Portfolio Return": portfolio_return,
-        "Stocks": number_of_stocks
-    })
+        if available_returns.empty:
+            continue
+
+
+        # Long positions use the stock return directly.
+        #
+        # Short positions reverse the stock return.
+        #
+        # Position weights are equal across the portfolio.
+
+        position_returns = selected_stocks[
+            return_column
+        ].copy()
+
+
+        adjusted_returns = []
+
+        for _, row in selected_stocks.iterrows():
+
+            stock_return = row[return_column]
+
+            if pd.isna(stock_return):
+                continue
+
+
+            if row["Position Direction"] == "Long":
+
+                adjusted_return = stock_return
+
+            else:
+
+                adjusted_return = -stock_return
+
+
+            adjusted_returns.append(
+                adjusted_return
+                * row["Position Weight"]
+            )
+
+
+        if not adjusted_returns:
+            continue
+
+
+        portfolio_return = sum(
+            adjusted_returns
+        )
+
+
+        # -------------------------------------------------
+        # Determine actual calendar date of this return
+        # -------------------------------------------------
+
+        if return_column == "thu_to_fri_return":
+
+            return_date = (
+                prediction_date
+                + pd.Timedelta(days=1)
+            )
+
+        elif return_column == "fri_to_mon_return":
+
+            return_date = (
+                prediction_date
+                + pd.Timedelta(days=4)
+            )
+
+        elif return_column == "mon_to_tue_return":
+
+            return_date = (
+                prediction_date
+                + pd.Timedelta(days=5)
+            )
+
+        elif return_column == "tue_to_wed_return":
+
+            return_date = (
+                prediction_date
+                + pd.Timedelta(days=6)
+            )
+
+        elif return_column == "wed_to_thu_return":
+
+            return_date = (
+                prediction_date
+                + pd.Timedelta(days=7)
+            )
+
+
+        daily_results.append({
+            "Prediction Date": prediction_date,
+            "Return Date": return_date,
+            "Period": return_label,
+            "Portfolio Return": portfolio_return
+        })
 
 
 # ---------------------------------------------------------
-# Create results dataframe
+# Create daily results dataframe
 # ---------------------------------------------------------
 
-results = pd.DataFrame(weekly_results)
+results = pd.DataFrame(daily_results)
 
 
 if results.empty:
 
     st.warning(
-        "There are no completed weeks with available returns."
+        "There are no completed periods with available returns."
     )
 
     st.stop()
@@ -297,7 +450,9 @@ results["Cumulative Return"] = (
 # Calculate drawdown
 # ---------------------------------------------------------
 
-wealth_index = 1 + results["Cumulative Return"]
+wealth_index = (
+    1 + results["Cumulative Return"]
+)
 
 running_max = wealth_index.cummax()
 
@@ -314,21 +469,26 @@ cumulative_return = (
     results["Cumulative Return"].iloc[-1]
 )
 
-average_weekly_return = (
+
+average_daily_return = (
     results["Portfolio Return"].mean()
 )
+
 
 win_rate = (
     results["Portfolio Return"] > 0
 ).mean()
 
-best_week = (
+
+best_day = (
     results["Portfolio Return"].max()
 )
 
-worst_week = (
+
+worst_day = (
     results["Portfolio Return"].min()
 )
+
 
 max_drawdown = (
     results["Drawdown"].min()
@@ -343,37 +503,49 @@ st.subheader("Performance")
 
 stat1, stat2, stat3, stat4, stat5, stat6 = st.columns(6)
 
+
 with stat1:
+
     st.metric(
         "Cumulative Return",
         f"{cumulative_return:.2%}"
     )
 
+
 with stat2:
+
     st.metric(
-        "Average Weekly",
-        f"{average_weekly_return:.2%}"
+        "Average Daily",
+        f"{average_daily_return:.2%}"
     )
 
+
 with stat3:
+
     st.metric(
         "Win Rate",
         f"{win_rate:.1%}"
     )
 
+
 with stat4:
+
     st.metric(
-        "Best Week",
-        f"{best_week:.2%}"
+        "Best Day",
+        f"{best_day:.2%}"
     )
+
 
 with stat5:
+
     st.metric(
-        "Worst Week",
-        f"{worst_week:.2%}"
+        "Worst Day",
+        f"{worst_day:.2%}"
     )
 
+
 with stat6:
+
     st.metric(
         "Max Drawdown",
         f"{max_drawdown:.2%}"
@@ -384,63 +556,146 @@ with stat6:
 # Cumulative return chart
 # ---------------------------------------------------------
 
+# ---------------------------------------------------------
+# Cumulative return chart
+# ---------------------------------------------------------
+
 st.subheader("Cumulative Return")
 
 
-# Add the starting point:
-#
-# The first prediction is made on the first prediction date,
-# but its return is only realised one week later.
-#
-# Therefore the portfolio starts at 0% on the first
-# prediction date.
+# Add the initial 0% starting point
+first_prediction_date = (
+    results["Prediction Date"].min()
+)
 
-first_prediction_date = results["Prediction Date"].min()
+
+starting_point = pd.DataFrame({
+    "Return Date": [
+        first_prediction_date
+    ],
+    "Cumulative Return": [
+        0.0
+    ]
+})
+
 
 chart_data = pd.concat(
     [
-        pd.DataFrame({
-            "Date": [first_prediction_date],
-            "Cumulative Return": [0.0]
-        }),
+        starting_point,
 
         results[
-            ["Return Date", "Cumulative Return"]
-        ].rename(
-            columns={"Return Date": "Date"}
-        )
+            [
+                "Return Date",
+                "Cumulative Return"
+            ]
+        ]
     ],
     ignore_index=True
 )
 
+
 chart_data = (
     chart_data
-    .drop_duplicates(subset=["Date"], keep="last")
-    .sort_values("Date")
-    .set_index("Date")
+    .drop_duplicates(
+        subset=["Return Date"],
+        keep="last"
+    )
+    .sort_values("Return Date")
+    .reset_index(drop=True)
 )
 
 
-st.line_chart(
-    chart_data
+# Create readable date labels
+chart_data["Date Label"] = (
+    chart_data["Return Date"]
+    .dt.strftime("%d/%m/%Y")
+)
+
+
+# Plotly line chart
+fig = px.line(
+    chart_data,
+    x="Date Label",
+    y="Cumulative Return",
+    markers=True,
+    labels={
+        "Date Label": "Date",
+        "Cumulative Return": "Cumulative Return"
+    }
+)
+
+
+fig.update_yaxes(
+    tickformat=".1%"
+)
+
+
+fig.update_layout(
+    hovermode="x unified",
+    xaxis=dict(
+        type="category"
+    )
+)
+
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
 )
 
 
 # ---------------------------------------------------------
-# Weekly return chart
+# Daily returns chart
 # ---------------------------------------------------------
 
-st.subheader("Weekly Returns")
+# ---------------------------------------------------------
+# Daily portfolio returns chart
+# ---------------------------------------------------------
 
-weekly_chart = (
-    results
-    .set_index("Return Date")[
-        ["Portfolio Return"]
+st.subheader("Daily Portfolio Returns")
+
+
+daily_chart = results[
+    [
+        "Return Date",
+        "Portfolio Return"
     ]
+].copy()
+
+
+daily_chart["Date Label"] = (
+    daily_chart["Return Date"]
+    .dt.strftime("%d/%m/%Y")
 )
 
-st.bar_chart(
-    weekly_chart
+
+fig_daily = px.bar(
+    daily_chart,
+    x="Date Label",
+    y="Portfolio Return",
+    labels={
+        "Date Label": "Date",
+        "Portfolio Return": "Daily Return"
+    }
+)
+
+
+fig_daily.update_yaxes(
+    tickformat=".1%"
+)
+
+
+fig_daily.update_layout(
+    hovermode="x unified",
+    xaxis=dict(
+        type="category"
+    )
+)
+
+
+st.plotly_chart(
+    fig_daily,
+    use_container_width=True
 )
 
 
@@ -451,7 +706,6 @@ st.bar_chart(
 st.subheader("Current Portfolio")
 
 
-# Most recent prediction date
 latest_date = df["Date"].max()
 
 current_df = df[
@@ -466,7 +720,7 @@ st.caption(
 
 
 # ---------------------------------------------------------
-# Current long/short selections
+# Current Long-only
 # ---------------------------------------------------------
 
 if selected_direction == "Long":
@@ -501,6 +755,10 @@ if selected_direction == "Long":
     )
 
 
+# ---------------------------------------------------------
+# Current Short-only
+# ---------------------------------------------------------
+
 elif selected_direction == "Short":
 
     current_short = (
@@ -533,9 +791,12 @@ elif selected_direction == "Short":
     )
 
 
+# ---------------------------------------------------------
+# Current Long/Short
+# ---------------------------------------------------------
+
 else:
 
-    # Long side
     current_long = (
         current_df
         .dropna(subset=[long_probability_column])
@@ -550,7 +811,6 @@ else:
     current_long["Direction"] = "Long"
 
 
-    # Short side
     current_short = (
         current_df
         .dropna(subset=[short_probability_column])
@@ -565,7 +825,6 @@ else:
     current_short["Direction"] = "Short"
 
 
-    # Combine both sides
     display_current = pd.concat(
         [
             current_long[
@@ -610,6 +869,7 @@ st.dataframe(
     hide_index=True
 )
 
+
 # ---------------------------------------------------------
 # Historical portfolio picks
 # ---------------------------------------------------------
@@ -617,16 +877,25 @@ st.dataframe(
 st.subheader("Historical Portfolio Picks")
 
 st.caption(
-    "Expand a week to see the stocks selected by the strategy "
-    "and how each position contributed to that week's return."
+    "Expand a prediction week to see the stocks selected "
+    "and their daily returns."
 )
 
 
-# Work backwards so the most recent completed week appears first
 completed_dates = (
-    results
-    .sort_values("Return Date", ascending=False)
-    [["Prediction Date", "Return Date", "Portfolio Return"]]
+    results[
+        [
+            "Prediction Date",
+            "Return Date"
+        ]
+    ]
+    .drop_duplicates(
+        subset=["Prediction Date"]
+    )
+    .sort_values(
+        "Prediction Date",
+        ascending=False
+    )
     .to_dict("records")
 )
 
@@ -634,47 +903,57 @@ completed_dates = (
 for week in completed_dates:
 
     prediction_date = week["Prediction Date"]
-    return_date = week["Return Date"]
-    portfolio_return = week["Portfolio Return"]
 
+    week_results = results[
+        results["Prediction Date"] == prediction_date
+    ]
 
-    # -----------------------------------------------------
-    # Create the expander title
-    # -----------------------------------------------------
+    # Total return over the full week
+    week_total_return = (
+        (1 + week_results["Portfolio Return"])
+        .prod()
+        - 1
+    )
 
-    direction_label = selected_direction
 
     if selected_direction == "Long/Short":
-        position_count = f"{top_n} long + {top_n} short"
+
+        position_count = (
+            f"{top_n} long + {top_n} short"
+        )
+
     else:
-        position_count = f"{top_n} stocks"
+
+        position_count = (
+            f"{top_n} stocks"
+        )
 
 
     expander_title = (
-        f"{prediction_date.strftime('%Y-%m-%d')} "
-        f"→ {return_date.strftime('%Y-%m-%d')}  |  "
-        f"Return: {portfolio_return:.2%}  |  "
+        f"{prediction_date.strftime('%Y-%m-%d')}  |  "
+        f"Weekly Return: {week_total_return:.2%}  |  "
         f"{position_count}"
     )
 
 
     with st.expander(expander_title):
 
-        # Get the rows corresponding to this prediction week
-        week_df = df[
+        historical_week = df[
             df["Date"] == prediction_date
         ].copy()
 
 
         # -------------------------------------------------
-        # Long-only
+        # Long
         # -------------------------------------------------
 
         if selected_direction == "Long":
 
-            long_df = (
-                week_df
-                .dropna(subset=[long_probability_column])
+            selected_week = (
+                historical_week
+                .dropna(
+                    subset=[long_probability_column]
+                )
                 .sort_values(
                     long_probability_column,
                     ascending=False
@@ -683,56 +962,41 @@ for week in completed_dates:
                 .copy()
             )
 
+            selected_week["Direction"] = "Long"
 
-            # Each position gets equal weight
-            weight = 1 / len(long_df)
-
-
-            long_df["Rank"] = range(
-                1,
-                len(long_df) + 1
+            selected_week["Probability"] = (
+                selected_week[
+                    long_probability_column
+                ]
             )
 
-            long_df["Direction"] = "Long"
-
-            long_df["Position Return"] = (
-                long_df["weekly_return"]
-            )
-
-            long_df["Contribution"] = (
-                long_df["Position Return"] * weight
+            selected_week["Weekly Return"] = (
+                selected_week["weekly_return"]
             )
 
 
-            display_df = long_df[
+            display_week = selected_week[
                 [
-                    "Rank",
                     "Ticker",
-                    long_probability_column,
+                    "Probability",
                     "Close",
-                    "Position Return",
-                    "Contribution"
+                    "Weekly Return",
+                    *daily_returns.keys()
                 ]
             ].copy()
 
 
-            display_df = display_df.rename(
-                columns={
-                    long_probability_column: "Probability",
-                    "Close": "Entry Price"
-                }
-            )
-
-
         # -------------------------------------------------
-        # Short-only
+        # Short
         # -------------------------------------------------
 
         elif selected_direction == "Short":
 
-            short_df = (
-                week_df
-                .dropna(subset=[short_probability_column])
+            selected_week = (
+                historical_week
+                .dropna(
+                    subset=[short_probability_column]
+                )
                 .sort_values(
                     short_probability_column,
                     ascending=True
@@ -741,46 +1005,28 @@ for week in completed_dates:
                 .copy()
             )
 
+            selected_week["Direction"] = "Short"
 
-            # Each position gets equal weight
-            weight = 1 / len(short_df)
-
-
-            short_df["Rank"] = range(
-                1,
-                len(short_df) + 1
+            selected_week["Probability"] = (
+                selected_week[
+                    short_probability_column
+                ]
             )
 
-            short_df["Direction"] = "Short"
-
-            # Reverse stock return for short position
-            short_df["Position Return"] = (
-                -short_df["weekly_return"]
-            )
-
-            short_df["Contribution"] = (
-                short_df["Position Return"] * weight
+            selected_week["Weekly Return"] = (
+                -selected_week["weekly_return"]
             )
 
 
-            display_df = short_df[
+            display_week = selected_week[
                 [
-                    "Rank",
                     "Ticker",
-                    short_probability_column,
+                    "Probability",
                     "Close",
-                    "Position Return",
-                    "Contribution"
+                    "Weekly Return",
+                    *daily_returns.keys()
                 ]
             ].copy()
-
-
-            display_df = display_df.rename(
-                columns={
-                    short_probability_column: "Probability",
-                    "Close": "Entry Price"
-                }
-            )
 
 
         # -------------------------------------------------
@@ -789,13 +1035,11 @@ for week in completed_dates:
 
         else:
 
-            # ---------------------------------------------
-            # Long side
-            # ---------------------------------------------
-
-            long_df = (
-                week_df
-                .dropna(subset=[long_probability_column])
+            long_week = (
+                historical_week
+                .dropna(
+                    subset=[long_probability_column]
+                )
                 .sort_values(
                     long_probability_column,
                     ascending=False
@@ -804,14 +1048,24 @@ for week in completed_dates:
                 .copy()
             )
 
+            long_week["Direction"] = "Long"
 
-            # ---------------------------------------------
-            # Short side
-            # ---------------------------------------------
+            long_week["Probability"] = (
+                long_week[
+                    long_probability_column
+                ]
+            )
 
-            short_df = (
-                week_df
-                .dropna(subset=[short_probability_column])
+            long_week["Weekly Return"] = (
+                long_week["weekly_return"]
+            )
+
+
+            short_week = (
+                historical_week
+                .dropna(
+                    subset=[short_probability_column]
+                )
                 .sort_values(
                     short_probability_column,
                     ascending=True
@@ -820,130 +1074,61 @@ for week in completed_dates:
                 .copy()
             )
 
+            short_week["Direction"] = "Short"
 
-            # Each position has equal weight across the
-            # entire long/short portfolio.
-            #
-            # e.g. Top N = 5:
-            # 5 long + 5 short = 10 positions
-            # each position = 10%
-            total_positions = (
-                len(long_df) + len(short_df)
+            short_week["Probability"] = (
+                short_week[
+                    short_probability_column
+                ]
             )
 
-            weight = 1 / total_positions
-
-
-            # ---------------------------------------------
-            # Long positions
-            # ---------------------------------------------
-
-            long_df["Rank"] = range(
-                1,
-                len(long_df) + 1
-            )
-
-            long_df["Direction"] = "Long"
-
-            long_df["Position Return"] = (
-                long_df["weekly_return"]
-            )
-
-            long_df["Contribution"] = (
-                long_df["Position Return"] * weight
+            short_week["Weekly Return"] = (
+                -short_week["weekly_return"]
             )
 
 
-            # ---------------------------------------------
-            # Short positions
-            # ---------------------------------------------
+            st.markdown("### Long")
 
-            short_df["Rank"] = range(
-                1,
-                len(short_df) + 1
-            )
-
-            short_df["Direction"] = "Short"
-
-            short_df["Position Return"] = (
-                -short_df["weekly_return"]
-            )
-
-            short_df["Contribution"] = (
-                short_df["Position Return"] * weight
-            )
-
-
-            # ---------------------------------------------
-            # Prepare long table
-            # ---------------------------------------------
-
-            long_display = long_df[
+            long_display = long_week[
                 [
-                    "Rank",
                     "Ticker",
-                    long_probability_column,
+                    "Probability",
                     "Close",
-                    "Direction",
-                    "Position Return",
-                    "Contribution"
+                    "Weekly Return",
+                    *daily_returns.keys()
                 ]
             ].copy()
 
 
             long_display = long_display.rename(
-                columns={
-                    long_probability_column: "Probability",
-                    "Close": "Entry Price"
-                }
+                columns=daily_returns
             )
 
-
-            # ---------------------------------------------
-            # Prepare short table
-            # ---------------------------------------------
-
-            short_display = short_df[
-                [
-                    "Rank",
-                    "Ticker",
-                    short_probability_column,
-                    "Close",
-                    "Direction",
-                    "Position Return",
-                    "Contribution"
-                ]
-            ].copy()
-
-
-            short_display = short_display.rename(
-                columns={
-                    short_probability_column: "Probability",
-                    "Close": "Entry Price"
-                }
-            )
-
-
-            # ---------------------------------------------
-            # Display Long / Short separately
-            # ---------------------------------------------
-
-            st.markdown("### Long")
 
             long_display["Probability"] = (
                 long_display["Probability"]
                 .map(lambda x: f"{x:.2%}")
             )
 
-            long_display["Position Return"] = (
-                long_display["Position Return"]
+
+            long_display["Weekly Return"] = (
+                long_display["Weekly Return"]
                 .map(lambda x: f"{x:.2%}")
             )
 
-            long_display["Contribution"] = (
-                long_display["Contribution"]
-                .map(lambda x: f"{x:.2%}")
-            )
+
+            for column in daily_returns.values():
+
+                long_display[column] = (
+                    long_display[column]
+                    .map(
+                        lambda x:
+                        f"{x:.2%}"
+                        if pd.notna(x)
+                        else ""
+                    )
+                )
+
 
             st.dataframe(
                 long_display,
@@ -954,20 +1139,46 @@ for week in completed_dates:
 
             st.markdown("### Short")
 
+            short_display = short_week[
+                [
+                    "Ticker",
+                    "Probability",
+                    "Close",
+                    "Weekly Return",
+                    *daily_returns.keys()
+                ]
+            ].copy()
+
+
+            short_display = short_display.rename(
+                columns=daily_returns
+            )
+
+
             short_display["Probability"] = (
                 short_display["Probability"]
                 .map(lambda x: f"{x:.2%}")
             )
 
-            short_display["Position Return"] = (
-                short_display["Position Return"]
+
+            short_display["Weekly Return"] = (
+                short_display["Weekly Return"]
                 .map(lambda x: f"{x:.2%}")
             )
 
-            short_display["Contribution"] = (
-                short_display["Contribution"]
-                .map(lambda x: f"{x:.2%}")
-            )
+
+            for column in daily_returns.values():
+
+                short_display[column] = (
+                    short_display[column]
+                    .map(
+                        lambda x:
+                        f"{x:.2%}"
+                        if pd.notna(x)
+                        else ""
+                    )
+                )
+
 
             st.dataframe(
                 short_display,
@@ -976,33 +1187,104 @@ for week in completed_dates:
             )
 
 
-            # Move to next week because Long/Short has
-            # already displayed everything inside this branch.
             continue
 
 
         # -------------------------------------------------
-        # Format Long-only / Short-only table
+        # Format Long-only / Short-only
         # -------------------------------------------------
 
-        display_df["Probability"] = (
-            display_df["Probability"]
+        display_week = display_week.rename(
+            columns=daily_returns
+        )
+
+
+        display_week["Probability"] = (
+            display_week["Probability"]
             .map(lambda x: f"{x:.2%}")
         )
 
-        display_df["Position Return"] = (
-            display_df["Position Return"]
+
+        display_week["Weekly Return"] = (
+            display_week["Weekly Return"]
             .map(lambda x: f"{x:.2%}")
         )
 
-        display_df["Contribution"] = (
-            display_df["Contribution"]
-            .map(lambda x: f"{x:.2%}")
-        )
+
+        for column in daily_returns.values():
+
+            display_week[column] = (
+                display_week[column]
+                .map(
+                    lambda x:
+                    f"{x:.2%}"
+                    if pd.notna(x)
+                    else ""
+                )
+            )
 
 
         st.dataframe(
-            display_df,
+            display_week,
             use_container_width=True,
             hide_index=True
         )
+
+
+# ---------------------------------------------------------
+# Daily results table
+# ---------------------------------------------------------
+
+st.subheader("Daily Portfolio Returns")
+
+
+display_results = results.copy()
+
+
+display_results["Prediction Date"] = (
+    display_results["Prediction Date"]
+    .dt.strftime("%Y-%m-%d")
+)
+
+
+display_results["Return Date"] = (
+    display_results["Return Date"]
+    .dt.strftime("%Y-%m-%d")
+)
+
+
+display_results["Portfolio Return"] = (
+    display_results["Portfolio Return"]
+    .map(lambda x: f"{x:.2%}")
+)
+
+
+display_results["Cumulative Return"] = (
+    display_results["Cumulative Return"]
+    .map(lambda x: f"{x:.2%}")
+)
+
+
+display_results["Drawdown"] = (
+    display_results["Drawdown"]
+    .map(lambda x: f"{x:.2%}")
+)
+
+
+display_results = display_results[
+    [
+        "Prediction Date",
+        "Return Date",
+        "Period",
+        "Portfolio Return",
+        "Cumulative Return",
+        "Drawdown"
+    ]
+]
+
+
+st.dataframe(
+    display_results,
+    use_container_width=True,
+    hide_index=True
+)
