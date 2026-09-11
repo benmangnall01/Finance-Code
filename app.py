@@ -21,10 +21,9 @@ st.title("ML Portfolio Tracker")
 # Find the master CSV
 # ---------------------------------------------------------
 
-WEBSITE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = WEBSITE_DIR.parent
+WEBSITE_DIR = Path(__file__).resolve()
 
-MASTER_FILE = PROJECT_DIR / "Website" / "Probabilities_All.csv"
+MASTER_FILE = "Probabilities_All.csv"
 
 
 # ---------------------------------------------------------
