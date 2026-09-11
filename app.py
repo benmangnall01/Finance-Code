@@ -3,7 +3,6 @@ import streamlit as st
 from pathlib import Path
 from datetime import timedelta
 
-
 # ---------------------------------------------------------
 # Page setup
 # ---------------------------------------------------------
@@ -15,7 +14,6 @@ st.set_page_config(
 )
 
 st.title("ML Portfolio Tracker")
-
 
 # ---------------------------------------------------------
 # Find the master CSV
@@ -37,19 +35,19 @@ df = pd.read_csv(MASTER_FILE)
 
 df["Date"] = pd.to_datetime(df["Date"])
 
+max_N = df["Ticker"].nunique()
 
 # ---------------------------------------------------------
 # Define available models
 # ---------------------------------------------------------
 
 models = {
+    "Ensemble": "Ensemble",
     "Random Forest": "RF",
     "XGBoost": "XGBoost",
     "LGBM": "LGBM",
     "CatBoost": "CatBoost",
-    "Ensemble": "Ensemble"
 }
-
 
 # ---------------------------------------------------------
 # Controls
@@ -68,20 +66,19 @@ with col1:
 with col2:
     selected_direction = st.selectbox(
         "Direction",
-        ["Long", "Short", "Long/Short"]
+        ["Long/Short", "Long", "Short"]
     )
 
 with col3:
     top_n = st.number_input(
         "Top N",
         min_value=1,
-        max_value=500,
-        value=10,
+        max_value=max_N,
+        value=3,
         step=1
     )
 
 top_n = int(top_n)
-
 
 # ---------------------------------------------------------
 # Determine probability columns
