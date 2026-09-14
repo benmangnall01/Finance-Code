@@ -15,6 +15,29 @@ st.set_page_config(
 
 st.title("ML Portfolio Tracker")
 
+st.info(
+    """
+    ### About this tracker
+
+    This dashboard tracks the **live performance of our machine learning
+    stock-selection strategy**.
+
+    Each week, the models generate fresh predictions for the stock universe.
+    Those predictions are recorded at the time they are made and are used to
+    determine the portfolios shown here.
+
+    The performance results therefore reflect **predictions that were actually
+    generated live**, rather than predictions reconstructed from historical
+    data in a backtest.
+
+    The controls below let you explore what the live results would have looked
+    like using different models, long/short strategies, and numbers of stocks
+    selected. Changing these settings can therefore change the historical
+    performance shown, but the underlying predictions themselves are always the
+    original live predictions.
+    """,
+    unsafe_allow_html=False
+)
 
 # ---------------------------------------------------------
 # Find the master CSV
