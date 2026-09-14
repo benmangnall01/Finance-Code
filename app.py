@@ -15,7 +15,6 @@ st.set_page_config(
 
 st.title("ML Portfolio Tracker")
 
-```python
 st.markdown(
     """
     <style>
@@ -77,7 +76,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-```
 
 # ---------------------------------------------------------
 # Find the master CSV
