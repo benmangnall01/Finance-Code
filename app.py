@@ -15,27 +15,69 @@ st.set_page_config(
 
 st.title("ML Portfolio Tracker")
 
-st.info(
+```python
+st.markdown(
     """
-    ### About this tracker
+    <style>
+    .about-box {
+        padding: 1.2rem 1.4rem;
+        border-radius: 0.6rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid var(--border-color);
+        background-color: var(--background-color);
+        color: var(--text-color);
+    }
 
-    This dashboard tracks the **live performance of our machine learning
-    stock-selection strategy**.
+    .about-box h3 {
+        margin-top: 0;
+        margin-bottom: 0.7rem;
+    }
 
-    Each week, the models generate fresh predictions for the stock universe.
-    Those predictions are recorded at the time they are made and are used to
-    determine the portfolios shown here.
+    .about-box p {
+        margin-bottom: 0.6rem;
+    }
 
-    The performance results therefore reflect **predictions that were actually
-    generated live**, rather than predictions reconstructed from historical
-    data in a backtest.
+    @media (prefers-color-scheme: light) {
+        .about-box {
+            --background-color: #f5f7fa;
+            --border-color: #d9dee7;
+            --text-color: #1f2937;
+        }
+    }
 
-    The controls below let you explore what the live results would have looked
-    like using different models, long/short strategies, and numbers of stocks
-    selected. Changing these settings can therefore change the historical
-    performance shown, but the underlying predictions themselves are always the
-    original live predictions.
-    """)
+    @media (prefers-color-scheme: dark) {
+        .about-box {
+            --background-color: #20242b;
+            --border-color: #3a414c;
+            --text-color: #f1f3f5;
+        }
+    }
+    </style>
+
+    <div class="about-box">
+        <h3>About this tracker</h3>
+
+        <p>
+        This dashboard tracks the <strong>live performance</strong> of our
+        machine learning stock-selection strategy.
+        </p>
+
+        <p>
+        Each week, fresh model predictions are generated and recorded at the
+        time they are made. The portfolios and performance shown here are
+        based solely on those <strong>live predictions</strong> — they are not
+        reconstructed from historical backtests.
+        </p>
+
+        <p>
+        The controls let you explore how those same live predictions would have
+        performed using different models, directions, and Top N selections.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+```
 
 # ---------------------------------------------------------
 # Find the master CSV
