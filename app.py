@@ -35,9 +35,7 @@ st.info(
     selected. Changing these settings can therefore change the historical
     performance shown, but the underlying predictions themselves are always the
     original live predictions.
-    """,
-    unsafe_allow_html=False
-)
+    """)
 
 # ---------------------------------------------------------
 # Find the master CSV
