@@ -56,16 +56,12 @@ st.markdown(
     <div class="about-box">
         <h3>About this tracker</h3>
 
-        This dashboard tracks the live performance of our
-        machine learning stock-selection strategy.
+        This dashboard tracks the live performance of our machine learning stock-selection strategy.
 
-        Each week, fresh model predictions are generated and recorded at the
-        time they are made. The portfolios and performance shown here are
-        based solely on those live predictions — they are not
-        reconstructed from historical backtests.
+        Each week, fresh model predictions are generated and recorded at the time they are made. The portfolios and performance shown here are
+        based solely on those live predictions — they are not reconstructed from historical backtests.
 
-        The controls let you explore how those same live predictions would have
-        performed using different models, directions, and Top N selections.
+        The controls let you explore how those same live predictions would have performed using different models, directions, and Top N selections.
     </div>
     """,
     unsafe_allow_html=True
