@@ -294,12 +294,8 @@ for prediction_date, week_df in df.groupby("Date"):
             "Prediction Date": prediction_date,
             "Return Date": return_date,
             "Period": return_label,
-            "Portfolio Return": portfolio_return
+            "Portfolio Return": portfolio_return,
         })
-
-# ---------------------------------------------------------
-# Create daily results dataframe
-# ---------------------------------------------------------
 
 results = pd.DataFrame(daily_results)
 
@@ -331,13 +327,30 @@ results["Drawdown"] = (wealth_index / running_max) - 1
 
 cumulative_return = (results["Cumulative Return"].iloc[-1])
 
-average_daily_return = (results["Portfolio Return"].mean())
+portfolio_returns = results["Portfolio Return"]
 
-win_rate = (results["Portfolio Return"] > 0).mean()
+average_daily_return = portfolio_returns.mean()
 
-best_day = (results["Portfolio Return"].max())
+win_rate = (portfolio_returns > 0).mean()
 
-worst_day = (results["Portfolio Return"].min())
+annualization_factor = 252 ** 0.5
+
+return_volatility = portfolio_returns.std()
+
+sharpe_ratio = (
+    portfolio_returns.mean() / return_volatility * annualization_factor
+    if return_volatility != 0
+    else 0
+)
+
+downside_returns = portfolio_returns.clip(upper=0)
+downside_deviation = (downside_returns.pow(2).mean()) ** 0.5
+
+sortino_ratio = (
+    portfolio_returns.mean() / downside_deviation * annualization_factor
+    if downside_deviation != 0
+    else 0
+)
 
 max_drawdown = (results["Drawdown"].min())
 
@@ -359,10 +372,10 @@ with stat3:
     st.metric("Win Rate", f"{win_rate:.1%}")
 
 with stat4:
-    st.metric("Best Day", f"{best_day:.2%}")
+    st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
 
 with stat5:
-    st.metric("Worst Day", f"{worst_day:.2%}")
+    st.metric("Sortino Ratio", f"{sortino_ratio:.2f}")
 
 with stat6:
     st.metric("Max Drawdown", f"{max_drawdown:.2%}")
