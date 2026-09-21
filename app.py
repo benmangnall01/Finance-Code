@@ -153,12 +153,8 @@ for column in required_columns:
         st.stop()
 
 # ---------------------------------------------------------
-# Check return columns
+# Check daily return columns
 # ---------------------------------------------------------
-
-if "weekly_return" not in df.columns:
-    st.error("Could not find weekly return column: weekly_return")
-    st.stop()
 
 for column in daily_returns:
 
@@ -169,10 +165,10 @@ for column in daily_returns:
         st.stop()
 
 # ---------------------------------------------------------
-# Calculate completed weekly portfolio returns
+# Calculate daily portfolio returns
 # ---------------------------------------------------------
 
-weekly_results = []
+daily_results = []
 
 for prediction_date, week_df in df.groupby("Date"):
     week_df = week_df.copy()
@@ -236,34 +232,75 @@ for prediction_date, week_df in df.groupby("Date"):
         short_stocks["Position Direction"] = ("Short")
         selected_stocks = pd.concat([long_stocks, short_stocks], ignore_index=True)
 
-    # A weekly result is valid only when every selected holding has its
-    # complete Thursday-to-Thursday return. This prevents holidays and
-    # incomplete current weeks from being presented as a full weekly profit.
-    if selected_stocks["weekly_return"].isna().any():
-        continue
+    # -----------------------------------------------------
+    # Calculate each day's portfolio return
+    # -----------------------------------------------------
 
-    # Long positions use the stock return directly; short positions reverse
-    # it. Equal weights are assigned when the positions are selected above.
-    position_returns = selected_stocks["weekly_return"].where(
-        selected_stocks["Position Direction"] == "Long",
-        -selected_stocks["weekly_return"],
-    )
+    for return_column, return_label in daily_returns.items():
 
-    portfolio_return = (
-        position_returns * selected_stocks["Position Weight"]
-    ).sum()
+        available_returns = selected_stocks[return_column].dropna()
 
-    weekly_results.append({
-        "Prediction Date": prediction_date,
-        "Return Date": prediction_date + pd.Timedelta(days=7),
-        "Period": "Thu → Thu",
-        "Portfolio Return": portfolio_return,
-    })
+        if available_returns.empty:
+            continue
 
-results = pd.DataFrame(weekly_results)
+        # Long positions use the stock return directly.
+        # Short positions reverse the stock return.
+        # Position weights are equal across the portfolio.
+
+        position_returns = selected_stocks[return_column].copy()
+
+        adjusted_returns = []
+
+        for _, row in selected_stocks.iterrows():
+
+            stock_return = row[return_column]
+
+            if pd.isna(stock_return):
+                continue
+
+            if row["Position Direction"] == "Long":
+                adjusted_return = stock_return
+
+            else:
+                adjusted_return = -stock_return
+
+            adjusted_returns.append(adjusted_return * row["Position Weight"])
+
+        if not adjusted_returns:
+            continue
+
+        portfolio_return = sum(adjusted_returns)
+
+        # -------------------------------------------------
+        # Determine actual calendar date of this return
+        # -------------------------------------------------
+
+        if return_column == "thu_to_fri_return":
+            return_date = (prediction_date + pd.Timedelta(days=1))
+
+        elif return_column == "fri_to_mon_return":
+            return_date = (prediction_date + pd.Timedelta(days=4))
+
+        elif return_column == "mon_to_tue_return":
+            return_date = (prediction_date + pd.Timedelta(days=5))
+
+        elif return_column == "tue_to_wed_return":
+            return_date = (prediction_date + pd.Timedelta(days=6))
+
+        elif return_column == "wed_to_thu_return":
+            return_date = (prediction_date + pd.Timedelta(days=7))
+
+        daily_results.append({
+            "Prediction Date": prediction_date,
+            "Return Date": return_date,
+            "Period": return_label,
+            "Portfolio Return": portfolio_return,
+        })
+
+results = pd.DataFrame(daily_results)
 
 if results.empty:
-    st.warning("There are no completed weeks with available returns.")
+    st.warning("There are no completed periods with available returns.")
     st.stop()
 
 results = (results.sort_values("Return Date").reset_index(drop=True))
@@ -292,11 +329,11 @@ cumulative_return = (results["Cumulative Return"].iloc[-1])
 
 portfolio_returns = results["Portfolio Return"]
 
-average_weekly_return = portfolio_returns.mean()
+average_daily_return = portfolio_returns.mean()
 
 win_rate = (portfolio_returns > 0).mean()
 
-annualization_factor = 52 ** 0.5
+annualization_factor = 252 ** 0.5
 
 return_volatility = portfolio_returns.std()
 
@@ -329,7 +366,7 @@ with stat1:
     st.metric("Cumulative Return", f"{cumulative_return:.2%}")
 
 with stat2:
-    st.metric("Average Weekly", f"{average_weekly_return:.2%}")
+    st.metric("Average Daily", f"{average_daily_return:.2%}")
 
 with stat3:
     st.metric("Win Rate", f"{win_rate:.1%}")
@@ -385,29 +422,29 @@ fig.update_layout(hovermode="x unified", xaxis=dict(type="category"))
 st.plotly_chart(fig, use_container_width=True)
 
 # ---------------------------------------------------------
-# Weekly portfolio returns chart
+# Daily portfolio returns chart
 # ---------------------------------------------------------
 
-st.subheader("Weekly Portfolio Returns")
+st.subheader("Daily Portfolio Returns")
 
-weekly_chart = results[["Return Date", "Portfolio Return"]].copy()
+daily_chart = results[["Return Date", "Portfolio Return"]].copy()
 
-weekly_chart["Date Label"] = (
-    weekly_chart["Return Date"].dt.strftime("%d/%m/%Y"))
+daily_chart["Date Label"] = (
+    daily_chart["Return Date"].dt.strftime("%d/%m/%Y"))
 
-fig_weekly = px.bar(weekly_chart,
-                    x="Date Label",
-                    y="Portfolio Return",
-                    labels={
-                        "Date Label": "Week ending",
-                        "Portfolio Return": "Weekly Return"
-                    })
+fig_daily = px.bar(daily_chart,
+                   x="Date Label",
+                   y="Portfolio Return",
+                   labels={
+                       "Date Label": "Date",
+                       "Portfolio Return": "Daily Return"
+                   })
 
-fig_weekly.update_yaxes(tickformat=".1%")
+fig_daily.update_yaxes(tickformat=".1%")
 
-fig_weekly.update_layout(hovermode="x unified", xaxis=dict(type="category"))
+fig_daily.update_layout(hovermode="x unified", xaxis=dict(type="category"))
 
-st.plotly_chart(fig_weekly, use_container_width=True)
+st.plotly_chart(fig_daily, use_container_width=True)
 
 # ---------------------------------------------------------
 # Current portfolio
@@ -510,7 +547,7 @@ st.dataframe(display_current, use_container_width=True, hide_index=True)
 st.subheader("Historical Portfolio Picks")
 
 st.caption("Expand a prediction week to see the stocks selected "
-           "and their daily stock returns.")
+           "and their daily returns.")
 
 completed_dates = (results[[
     "Prediction Date", "Return Date"
@@ -523,7 +560,8 @@ for week in completed_dates:
 
     week_results = results[results["Prediction Date"] == prediction_date]
 
-    week_total_return = week_results["Portfolio Return"].iloc[0]
+    # Total return over the full week
+    week_total_return = ((1 + week_results["Portfolio Return"]).prod() - 1)
 
     if selected_direction == "Long/Short":
 
@@ -578,7 +616,7 @@ for week in completed_dates:
             selected_week["Direction"] = "Short"
 
             selected_week["Probability of Increase"] = (
-                selected_week[short_probability_column])
+                selected_week[long_probability_column])
 
             selected_week["Weekly Profit"] = (-selected_week["weekly_return"])
 
@@ -687,10 +725,10 @@ for week in completed_dates:
         st.dataframe(display_week, use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------
-# Weekly results table
+# Daily results table
 # ---------------------------------------------------------
 
-st.subheader("Weekly Portfolio Returns")
+st.subheader("Daily Portfolio Returns")
 
 display_results = results.copy()
 
