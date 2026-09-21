@@ -119,7 +119,7 @@ with col1:
 
 with col2:
     selected_direction = st.selectbox("Direction",
-                                      ["Long/Short", "Long", "Short"])
+                                      ["Long", "Short", "Long/Short"])
 
 with col3:
     top_n = st.number_input("Top N", min_value=1, max_value=max_N, value=3, step=1)
@@ -618,7 +618,7 @@ for week in completed_dates:
             selected_week["Probability of Increase"] = (
                 selected_week[long_probability_column])
 
-            selected_week["Weekly Profit"] = (selected_week["weekly_return"])
+            selected_week["Weekly Profit"] = (-selected_week["weekly_return"])
 
             display_week = selected_week[[
                 "Ticker", "Probability of Increase", "Close", "Weekly Profit",
