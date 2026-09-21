@@ -119,7 +119,7 @@ with col1:
 
 with col2:
     selected_direction = st.selectbox("Direction",
-                                      ["Long", "Short", "Long/Short"])
+                                      ["Long/Short", "Long", "Short"])
 
 with col3:
     top_n = st.number_input("Top N", min_value=1, max_value=max_N, value=3, step=1)
@@ -153,16 +153,51 @@ for column in required_columns:
         st.stop()
 
 # ---------------------------------------------------------
-# Check daily return columns
+# Check return columns
 # ---------------------------------------------------------
 
-for column in daily_returns:
+for column in [*daily_returns, "weekly_return"]:
 
     if column not in df.columns:
 
-        st.error(f"Could not find daily return column: {column}")
+        st.error(f"Could not find return column: {column}")
 
         st.stop()
+
+
+def calculate_weekly_portfolio_return(week_df):
+    """Return the equal-weight, buy-and-hold profit for one prediction week."""
+
+    if selected_direction == "Long":
+        selected_stocks = (week_df.dropna(
+            subset=[long_probability_column]).sort_values(
+                long_probability_column, ascending=False).head(top_n))
+        weekly_profits = selected_stocks["weekly_return"]
+
+    elif selected_direction == "Short":
+        selected_stocks = (week_df.dropna(
+            subset=[short_probability_column]).sort_values(
+                short_probability_column, ascending=True).head(top_n))
+        weekly_profits = -selected_stocks["weekly_return"]
+
+    else:
+        long_stocks = (week_df.dropna(
+            subset=[long_probability_column]).sort_values(
+                long_probability_column, ascending=False).head(top_n))
+
+        short_stocks = (week_df.dropna(
+            subset=[short_probability_column]).sort_values(
+                short_probability_column, ascending=True).head(top_n))
+
+        selected_stocks = pd.concat([long_stocks, short_stocks])
+        weekly_profits = pd.concat([
+            long_stocks["weekly_return"], -short_stocks["weekly_return"]
+        ])
+
+    if selected_stocks.empty or weekly_profits.isna().any():
+        return None
+
+    return weekly_profits.mean()
 
 # ---------------------------------------------------------
 # Calculate daily portfolio returns
@@ -546,22 +581,24 @@ st.dataframe(display_current, use_container_width=True, hide_index=True)
 
 st.subheader("Historical Portfolio Picks")
 
-st.caption("Expand a prediction week to see the stocks selected "
-           "and their daily returns.")
+st.caption("Weekly Profit is the equal-weight, buy-and-hold return of the "
+           "selected positions. Expand a completed prediction week to see "
+           "the individual weekly and daily returns.")
 
-completed_dates = (results[[
-    "Prediction Date", "Return Date"
-]].drop_duplicates(subset=["Prediction Date"]).sort_values(
-    "Prediction Date", ascending=False).to_dict("records"))
+completed_dates = (df.loc[df["weekly_return"].notna(), ["Date"]].drop_duplicates()
+                   .sort_values("Date", ascending=False).to_dict("records"))
 
 for week in completed_dates:
 
-    prediction_date = week["Prediction Date"]
+    prediction_date = week["Date"]
 
-    week_results = results[results["Prediction Date"] == prediction_date]
+    historical_week = df[df["Date"] == prediction_date].copy()
 
-    # Total return over the full week
-    week_total_return = ((1 + week_results["Portfolio Return"]).prod() - 1)
+    # This must reconcile with the mean of the displayed Weekly Profit values.
+    week_total_return = calculate_weekly_portfolio_return(historical_week)
+
+    if week_total_return is None:
+        continue
 
     if selected_direction == "Long/Short":
 
@@ -576,8 +613,6 @@ for week in completed_dates:
                       f"{position_count}")
 
     with st.expander(expander_title):
-
-        historical_week = df[df["Date"] == prediction_date].copy()
 
         # -------------------------------------------------
         # Long
